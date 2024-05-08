@@ -27,23 +27,46 @@ import androidx.core.content.ContextCompat;
 /** Helper to ask camera permission. */
 public final class CameraPermissionHelper {
   private static final int CAMERA_PERMISSION_CODE = 0;
-  private static final String CAMERA_PERMISSION = Manifest.permission.CAMERA;
+  private static final String[] CAMERA_PERMISSION = new String[] {
+          Manifest.permission.CAMERA,
+          Manifest.permission.BLUETOOTH,
+          Manifest.permission.BLUETOOTH_ADMIN,
+          Manifest.permission.BLUETOOTH_SCAN,
+          Manifest.permission.BLUETOOTH_ADVERTISE,
+          Manifest.permission.BLUETOOTH_CONNECT,
+          Manifest.permission.ACCESS_FINE_LOCATION,
+          Manifest.permission.ACCESS_WIFI_STATE,
+          Manifest.permission.CHANGE_WIFI_STATE,
+
+          // permission required by UWB API
+          Manifest.permission.UWB_RANGING,
+          Manifest.permission.NEARBY_WIFI_DEVICES
+  };
 
   /** Check to see we have the necessary permissions for this app. */
   public static boolean hasCameraPermission(Activity activity) {
-    return ContextCompat.checkSelfPermission(activity, CAMERA_PERMISSION)
-        == PackageManager.PERMISSION_GRANTED;
+    for (String permission : CAMERA_PERMISSION) {
+      if (!(ContextCompat.checkSelfPermission(activity, permission) == PackageManager.PERMISSION_GRANTED)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /** Check to see we have the necessary permissions for this app, and ask for them if we don't. */
   public static void requestCameraPermission(Activity activity) {
     ActivityCompat.requestPermissions(
-        activity, new String[] {CAMERA_PERMISSION}, CAMERA_PERMISSION_CODE);
+        activity, CAMERA_PERMISSION, CAMERA_PERMISSION_CODE);
   }
 
   /** Check to see if we need to show the rationale for this permission. */
   public static boolean shouldShowRequestPermissionRationale(Activity activity) {
-    return ActivityCompat.shouldShowRequestPermissionRationale(activity, CAMERA_PERMISSION);
+    for (String permission : CAMERA_PERMISSION) {
+      if (ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** Launch Application Setting to grant permission. */

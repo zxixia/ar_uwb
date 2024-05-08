@@ -1,5 +1,6 @@
 /*
- * Copyright 2017 Google LLC
+ *
+ * Copyright (C) 2022 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,6 +13,26 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
-include ':app'
-include ':uwbranging'
+syntax = "proto3";
+
+option java_package = "com.google.ar.core.examples.kotlin.uwb.data";
+option java_multiple_files = true;
+
+enum DeviceType {
+  CONTROLLER = 0;
+  CONTROLEE = 1;
+}
+
+enum ConfigType {
+  CONFIG_UNICAST_DS_TWR = 0;
+  CONFIG_MULTICAST_DS_TWR = 1;
+}
+
+message AppSettings {
+  DeviceType device_type = 1;
+  string device_display_name = 2;
+  string device_uuid = 3;
+  ConfigType config_type = 4;
+}

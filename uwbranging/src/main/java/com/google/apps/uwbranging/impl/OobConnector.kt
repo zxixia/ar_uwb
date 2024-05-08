@@ -1,5 +1,6 @@
 /*
- * Copyright 2017 Google LLC
+ *
+ * Copyright (C) 2022 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,6 +13,15 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
-include ':app'
-include ':uwbranging'
+
+package com.google.apps.uwbranging.impl
+
+import com.google.apps.uwbranging.UwbEndpoint
+import kotlinx.coroutines.flow.Flow
+
+internal interface OobConnector {
+    fun start(): Flow<UwbOobEvent>
+    fun sendMessage(endpoint: UwbEndpoint, message: ByteArray)
+}

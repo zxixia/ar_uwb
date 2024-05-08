@@ -17,9 +17,12 @@ package com.google.ar.core.examples.kotlin.helloar
 
 import android.opengl.GLES30
 import android.opengl.Matrix
+import android.os.Handler
+import android.os.HandlerThread
 import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import com.google.apps.uwbranging.EndpointEvents
 import com.google.ar.core.Anchor
 import com.google.ar.core.Camera
 import com.google.ar.core.DepthPoint
@@ -28,6 +31,7 @@ import com.google.ar.core.InstantPlacementPoint
 import com.google.ar.core.LightEstimate
 import com.google.ar.core.Plane
 import com.google.ar.core.Point
+import com.google.ar.core.Pose
 import com.google.ar.core.Session
 import com.google.ar.core.Trackable
 import com.google.ar.core.TrackingFailureReason
@@ -44,8 +48,12 @@ import com.google.ar.core.examples.java.common.samplerender.VertexBuffer
 import com.google.ar.core.examples.java.common.samplerender.arcore.BackgroundRenderer
 import com.google.ar.core.examples.java.common.samplerender.arcore.PlaneRenderer
 import com.google.ar.core.examples.java.common.samplerender.arcore.SpecularCubemapFilter
+import com.google.ar.core.examples.kotlin.uwb.data.AppContainer
+import com.google.ar.core.examples.kotlin.uwb.data.AppContainerImpl
 import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.google.ar.core.exceptions.NotYetAvailableException
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import java.io.IOException
 import java.nio.ByteBuffer
 
@@ -281,11 +289,8 @@ class HelloArRenderer(val activity: HelloArActivity) :
       }
 
     val camera = frame.camera
-    val currentPose = camera.displayOrientedPose
-    Log.i(
-      "xixia",
-      "tx: " + currentPose.tx() + ", ty: " + currentPose.ty() + ", tz: " + currentPose.tz()
-    )
+    currentPos = camera.displayOrientedPose
+    // Log.i("xixia", "tx: " + currentPose.tx() + ", ty: " + currentPose.ty() + ", tz: " + currentPose.tz())
     // Update BackgroundRenderer state to match the depth settings.
     try {
       backgroundRenderer.setUseDepthVisualization(
@@ -528,7 +533,39 @@ class HelloArRenderer(val activity: HelloArActivity) :
 
   private fun showError(errorMessage: String) =
     activity.view.snackbarHelper.showError(activity, errorMessage)
+
+  //---UWB-------------
+  lateinit var container: AppContainer
+  lateinit var workderThread: HandlerThread
+  lateinit var workderHandler: Handler
+  var currentPos : com.google.ar.core.Pose? = null
+  var currentEndpoint : EndpointEvents? = null
+  init {
+    container = AppContainerImpl(activity) {
+      Log.i("xixia", "UWN after loading")
+      container.rangingResultSource.start()
+      container.rangingResultSource.observeRangingResults().onEach {
+        // Log.i("xixia", "$it")
+        currentEndpoint = it
+      }.launchIn(container.coroutineScope)
+    }
+
+    workderThread = HandlerThread("worker")
+    workderThread.start()
+    workderHandler = Handler(workderThread.looper)
+    workderHandler.post(Updater())
+  }
+
+  inner private class Updater : Runnable {
+    override fun run() {
+      Log.i("xixia", "currentPos: $currentPos, currentEndpoint: $currentEndpoint")
+      workderHandler.postDelayed(this, 1000)
+    }
+  }
+  //---UWB-------------
 }
+
+
 
 /**
  * Associates an Anchor with the trackable it was attached to. This is used to be able to check
