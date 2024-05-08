@@ -281,7 +281,11 @@ class HelloArRenderer(val activity: HelloArActivity) :
       }
 
     val camera = frame.camera
-
+    val currentPose = camera.displayOrientedPose
+    Log.i(
+      "xixia",
+      "tx: " + currentPose.tx() + ", ty: " + currentPose.ty() + ", tz: " + currentPose.tz()
+    )
     // Update BackgroundRenderer state to match the depth settings.
     try {
       backgroundRenderer.setUseDepthVisualization(
