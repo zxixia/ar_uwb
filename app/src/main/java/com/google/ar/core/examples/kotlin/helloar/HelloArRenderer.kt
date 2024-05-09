@@ -33,7 +33,6 @@ import com.google.ar.core.InstantPlacementPoint
 import com.google.ar.core.LightEstimate
 import com.google.ar.core.Plane
 import com.google.ar.core.Point
-import com.google.ar.core.Pose
 import com.google.ar.core.Session
 import com.google.ar.core.Trackable
 import com.google.ar.core.TrackingFailureReason
@@ -50,14 +49,23 @@ import com.google.ar.core.examples.java.common.samplerender.VertexBuffer
 import com.google.ar.core.examples.java.common.samplerender.arcore.BackgroundRenderer
 import com.google.ar.core.examples.java.common.samplerender.arcore.PlaneRenderer
 import com.google.ar.core.examples.java.common.samplerender.arcore.SpecularCubemapFilter
+import com.google.ar.core.examples.kotlin.algo.Sphere
 import com.google.ar.core.examples.kotlin.uwb.data.AppContainer
 import com.google.ar.core.examples.kotlin.uwb.data.AppContainerImpl
 import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.google.ar.core.exceptions.NotYetAvailableException
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import org.apache.commons.math3.optim.InitialGuess
+import org.apache.commons.math3.optim.PointValuePair
+import org.apache.commons.math3.optim.nonlinear.scalar.GoalType
+import org.apache.commons.math3.optim.nonlinear.scalar.ObjectiveFunction
+import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.PowellOptimizer
 import java.io.IOException
 import java.nio.ByteBuffer
+import java.util.LinkedList
+import java.util.Queue
+
 
 /** Renders the HelloAR application using our example Renderer. */
 class HelloArRenderer(val activity: HelloArActivity) :
@@ -291,7 +299,9 @@ class HelloArRenderer(val activity: HelloArActivity) :
       }
 
     val camera = frame.camera
-    currentPos = camera.displayOrientedPose
+    synchronized(lock) {
+      currentPos = camera.displayOrientedPose
+    }
     // Log.i("xixia", "tx: " + currentPose.tx() + ", ty: " + currentPose.ty() + ", tz: " + currentPose.tz())
     // Update BackgroundRenderer state to match the depth settings.
     try {
@@ -548,16 +558,18 @@ class HelloArRenderer(val activity: HelloArActivity) :
       Log.i("xixia", "UWN after loading")
       container.rangingResultSource.start()
       container.rangingResultSource.observeRangingResults().onEach { result ->
-        // Log.i("xixia", "$it")
-        when (result) {
-          is EndpointEvents.EndpointFound -> endpoints.add(result.endpoint)
-          is EndpointEvents.UwbDisconnected -> endpointPositions.remove(result.endpoint)
-          is EndpointEvents.PositionUpdated -> endpointPositions[result.endpoint] = result.position
-          is EndpointEvents.EndpointLost -> {
-            endpoints.remove(result.endpoint)
-            endpointPositions.remove(result.endpoint)
+        synchronized(lock) {
+          // Log.i("xixia", "$it")
+          when (result) {
+              is EndpointEvents.EndpointFound -> endpoints.add(result.endpoint)
+              is EndpointEvents.UwbDisconnected -> endpointPositions.remove(result.endpoint)
+              is EndpointEvents.PositionUpdated -> endpointPositions[result.endpoint] = result.position
+              is EndpointEvents.EndpointLost -> {
+              endpoints.remove(result.endpoint)
+              endpointPositions.remove(result.endpoint)
+            }
+              else -> return@onEach
           }
-          else -> return@onEach
         }
       }.launchIn(container.coroutineScope)
     }
@@ -568,17 +580,107 @@ class HelloArRenderer(val activity: HelloArActivity) :
     workderHandler.post(Updater())
   }
 
+  var lock = Object()
+  val map1 = mutableMapOf<UwbEndpoint, Queue<Sphere>>()
+  var prevSp : Sphere? = null
+  val map2 = mutableMapOf<UwbEndpoint, Queue<Sphere>>()
+  val prev_weight = 0.3f
+  val next_weight = 0.7f
+
   inner private class Updater : Runnable {
     override fun run() {
-      Log.i("xixia", "currentPos: $currentPos")
       for (ep in endpoints) {
         ep?.let {
-          endpointPositions[ep]?.let {
-            Log.i("xixia", "$ep: ${it.distance?.value}")
+          endpointPositions[ep]?.let {uwbpos->
+            uwbpos.distance?.let {uwbdis->
+              uwbdis.value.let {uwbvalue->
+                var q1 = map1[ep]
+                q1?.let {
+                  // 不空
+                } ?: let {
+                  // 空
+                  q1 = LinkedList<Sphere>()
+                  map1[ep] = q1 as LinkedList<Sphere>
+                }
+
+                var q2 = map2[ep]
+                q2?.let {
+                  // 不空
+                } ?: let {
+                  // 空
+                  q2 = LinkedList<Sphere>()
+                  map2[ep] = q2 as LinkedList<Sphere>
+                }
+
+                synchronized(lock) {
+                  currentPos?.let {pose ->
+                    pose.tx()?.let {
+                      var s = Sphere(pose.tx().toDouble(),
+                                     pose.ty().toDouble(),
+                                     pose.tz().toDouble(),
+                                     uwbvalue.toDouble())
+                      Log.i("xixia", "[Q1][${q1?.size?.plus(1)}][${q2?.size}][${s.toString()}]")
+                      q1?.offer(s)
+                    }
+                  }
+                }
+                if (q1?.size!! > 4) {
+                  var x = 0.0
+                  var y = 0.0
+                  var z = 0.0
+                  var r = 0.0
+                  q1?.forEach {spe ->
+                    x += spe.mX
+                    y += spe.mY
+                    z += spe.mZ
+                    r += spe.mR
+                  }
+                  x /= q1?.size!!
+                  y /= q1?.size!!
+                  z /= q1?.size!!
+                  r /= q1?.size!!
+
+                  q1?.clear() // clear all
+                  var s = Sphere(x, y, z, r)
+                  prevSp?.let {
+                    // 不空
+                    var _x = it.mX * prev_weight + x * next_weight
+                    var _y = it.mY * prev_weight + y * next_weight
+                    var _z = it.mZ * prev_weight + z * next_weight
+                    var _r = it.mR * prev_weight + r * next_weight
+                    s = Sphere(_x, _y, _z, _r)
+                  }
+                  prevSp = s
+                  q2?.offer(s)
+                  Log.i("xixia", "[Q2][${q1?.size}][${q2?.size}][${s.toString()}]")
+
+                  if (q2?.size!! > 3) {
+                    // calculate here
+                    val optimizer = PowellOptimizer(1e-6, 1e-8)
+                    val result: PointValuePair = optimizer.optimize(
+                      ObjectiveFunction { point ->
+                        var sum = 0.0
+                        for (sphere in q2!!) {
+                          val dist = sphere.distanceTo(point.get(0), point.get(1), point.get(2))
+                          sum += dist * dist
+                        }
+                        sum
+                      },
+                      InitialGuess(doubleArrayOf(0.5, 0.5, 0.5)),
+                      GoalType.MINIMIZE
+                    )
+
+                    q2?.poll()
+                    Log.i("xixia", "[RE][${q1?.size}][${q2?.size}][${result}]")
+                  }
+
+                }
+              }
+            }
           }
         }
       }
-      workderHandler.postDelayed(this, 1000)
+      workderHandler.postDelayed(this, 100)
     }
   }
   //---UWB-------------
