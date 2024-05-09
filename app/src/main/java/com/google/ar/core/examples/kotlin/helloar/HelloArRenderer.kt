@@ -20,9 +20,11 @@ import android.opengl.Matrix
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
+import androidx.core.uwb.RangingPosition
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.google.apps.uwbranging.EndpointEvents
+import com.google.apps.uwbranging.UwbEndpoint
 import com.google.ar.core.Anchor
 import com.google.ar.core.Camera
 import com.google.ar.core.DepthPoint
@@ -539,14 +541,24 @@ class HelloArRenderer(val activity: HelloArActivity) :
   lateinit var workderThread: HandlerThread
   lateinit var workderHandler: Handler
   var currentPos : com.google.ar.core.Pose? = null
-  var currentEndpoint : EndpointEvents? = null
+  private val endpoints = mutableListOf<UwbEndpoint>()
+  private val endpointPositions = mutableMapOf<UwbEndpoint, RangingPosition>()
   init {
     container = AppContainerImpl(activity) {
       Log.i("xixia", "UWN after loading")
       container.rangingResultSource.start()
-      container.rangingResultSource.observeRangingResults().onEach {
+      container.rangingResultSource.observeRangingResults().onEach { result ->
         // Log.i("xixia", "$it")
-        currentEndpoint = it
+        when (result) {
+          is EndpointEvents.EndpointFound -> endpoints.add(result.endpoint)
+          is EndpointEvents.UwbDisconnected -> endpointPositions.remove(result.endpoint)
+          is EndpointEvents.PositionUpdated -> endpointPositions[result.endpoint] = result.position
+          is EndpointEvents.EndpointLost -> {
+            endpoints.remove(result.endpoint)
+            endpointPositions.remove(result.endpoint)
+          }
+          else -> return@onEach
+        }
       }.launchIn(container.coroutineScope)
     }
 
@@ -558,7 +570,14 @@ class HelloArRenderer(val activity: HelloArActivity) :
 
   inner private class Updater : Runnable {
     override fun run() {
-      Log.i("xixia", "currentPos: $currentPos, currentEndpoint: $currentEndpoint")
+      Log.i("xixia", "currentPos: $currentPos")
+      for (ep in endpoints) {
+        ep?.let {
+          endpointPositions[ep]?.let {
+            Log.i("xixia", "$ep: ${it.distance?.value}")
+          }
+        }
+      }
       workderHandler.postDelayed(this, 1000)
     }
   }
