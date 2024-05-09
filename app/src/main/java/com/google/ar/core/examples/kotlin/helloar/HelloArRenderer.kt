@@ -57,7 +57,8 @@ import com.google.ar.core.exceptions.NotYetAvailableException
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import org.apache.commons.math3.optim.InitialGuess
-import org.apache.commons.math3.optim.PointValuePair
+import org.apache.commons.math3.optim.MaxEval
+import org.apache.commons.math3.optim.MaxIter
 import org.apache.commons.math3.optim.nonlinear.scalar.GoalType
 import org.apache.commons.math3.optim.nonlinear.scalar.ObjectiveFunction
 import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.PowellOptimizer
@@ -655,18 +656,33 @@ class HelloArRenderer(val activity: HelloArActivity) :
                   Log.i("xixia", "[Q2][${q1?.size}][${q2?.size}][${s.toString()}]")
 
                   if (q2?.size!! > 3) {
+
+                    var x_ = 0.0
+                    var y_ = 0.0
+                    var z_ = 0.0
+                    for (s in q2!!) {
+                      x_ += s.mX
+                      y_ += s.mY
+                      z_ += s.mZ
+                    }
+                    x_ /= q2?.size!!
+                    y_ /= q2?.size!!
+                    z_ /= q2?.size!!
+
                     // calculate here
                     val optimizer = PowellOptimizer(1e-6, 1e-8)
-                    val result: PointValuePair = optimizer.optimize(
-                      ObjectiveFunction { point ->
+                    val result = optimizer.optimize(
+                      MaxIter(1000),  // 设置最大迭代次数
+                      MaxEval(1000),  // 设置最大评估次数
+                      ObjectiveFunction { point: DoubleArray ->
                         var sum = 0.0
                         for (sphere in q2!!) {
-                          val dist = sphere.distanceTo(point.get(0), point.get(1), point.get(2))
+                          val dist = sphere.distanceTo(point[0], point[1], point[2])
                           sum += dist * dist
                         }
                         sum
                       },
-                      InitialGuess(doubleArrayOf(0.5, 0.5, 0.5)),
+                      InitialGuess(doubleArrayOf(x_, y_, z_)),
                       GoalType.MINIMIZE
                     )
 

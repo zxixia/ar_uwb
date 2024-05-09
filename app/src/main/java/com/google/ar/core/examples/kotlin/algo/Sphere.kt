@@ -6,6 +6,6 @@ class Sphere(var mX: Double,  var mY: Double, var mZ: Double, var mR: Double) {
     }
 
     override fun toString(): String {
-        return "$mX, $mY, $mZ, $mZ"
+        return "$mX, $mY, $mZ, $mR"
     }
 }
