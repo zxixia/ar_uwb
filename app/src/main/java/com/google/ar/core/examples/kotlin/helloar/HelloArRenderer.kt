@@ -20,6 +20,7 @@ import android.opengl.Matrix
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
+import android.widget.TextView
 import androidx.core.uwb.RangingPosition
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -59,17 +60,19 @@ import kotlinx.coroutines.flow.onEach
 import org.apache.commons.math3.optim.InitialGuess
 import org.apache.commons.math3.optim.MaxEval
 import org.apache.commons.math3.optim.MaxIter
+import org.apache.commons.math3.optim.PointValuePair
 import org.apache.commons.math3.optim.nonlinear.scalar.GoalType
 import org.apache.commons.math3.optim.nonlinear.scalar.ObjectiveFunction
 import org.apache.commons.math3.optim.nonlinear.scalar.noderiv.PowellOptimizer
 import java.io.IOException
 import java.nio.ByteBuffer
+import java.util.Arrays
 import java.util.LinkedList
 import java.util.Queue
 
 
 /** Renders the HelloAR application using our example Renderer. */
-class HelloArRenderer(val activity: HelloArActivity) :
+class HelloArRenderer(val activity: HelloArActivity, val tvResult: TextView) :
   SampleRender.Renderer, DefaultLifecycleObserver {
   companion object {
     val TAG = "HelloArRenderer"
@@ -687,7 +690,12 @@ class HelloArRenderer(val activity: HelloArActivity) :
                     )
 
                     q2?.poll()
-                    Log.i("xixia", "[RE][${q1?.size}][${q2?.size}][${result}]")
+                    var sb = StringBuilder()
+                    sb.append("AR pos: \n" + "[" + prevSp.toString() + "]" + "\n\n" + "UWB Distance: \n" + uwbvalue.toDouble() + "\n\n" + "UWB Pos: \n" + Arrays.toString(result.point))
+                    activity.runOnUiThread {
+                      tvResult.text = sb
+                    }
+                    Log.i("xixia", "[RE][${q1?.size}][${q2?.size}][${Arrays.toString(result.point)}]")
                   }
 
                 }

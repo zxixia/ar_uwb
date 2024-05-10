@@ -17,6 +17,7 @@ package com.google.ar.core.examples.kotlin.helloar
 
 import android.os.Bundle
 import android.util.Log
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.ar.core.Config
@@ -55,6 +56,8 @@ class HelloArActivity : AppCompatActivity() {
   val instantPlacementSettings = InstantPlacementSettings()
   val depthSettings = DepthSettings()
 
+  lateinit var tvResult: TextView
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
@@ -82,14 +85,15 @@ class HelloArActivity : AppCompatActivity() {
     arCoreSessionHelper.beforeSessionResume = ::configureSession
     lifecycle.addObserver(arCoreSessionHelper)
 
-    // Set up the Hello AR renderer.
-    renderer = HelloArRenderer(this)
-    lifecycle.addObserver(renderer)
-
     // Set up Hello AR UI.
     view = HelloArView(this)
     lifecycle.addObserver(view)
     setContentView(view.root)
+
+    tvResult = findViewById(R.id.tv_result)
+    // Set up the Hello AR renderer.
+    renderer = HelloArRenderer(this, tvResult)
+    lifecycle.addObserver(renderer)
 
     // Sets up an example renderer using our HelloARRenderer.
     SampleRender(view.surfaceView, renderer, assets)
