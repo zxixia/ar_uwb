@@ -38,6 +38,7 @@ import com.google.ar.core.Session
 import com.google.ar.core.Trackable
 import com.google.ar.core.TrackingFailureReason
 import com.google.ar.core.TrackingState
+import com.google.ar.core.examples.java.EWMAFilter
 import com.google.ar.core.examples.java.common.helpers.DisplayRotationHelper
 import com.google.ar.core.examples.java.common.helpers.TrackingStateHelper
 import com.google.ar.core.examples.java.common.samplerender.Framebuffer
@@ -584,120 +585,109 @@ class HelloArRenderer(val activity: HelloArActivity, val tvResult: TextView) :
     workderHandler.post(Updater())
   }
 
+  val sphereMap = mutableMapOf<UwbEndpoint, Queue<Sphere>>()
+  val filterMap = mutableMapOf<UwbEndpoint, EWMAFilter>()
   var lock = Object()
+
+  /*
   val map1 = mutableMapOf<UwbEndpoint, Queue<Sphere>>()
   var prevSp : Sphere? = null
   val map2 = mutableMapOf<UwbEndpoint, Queue<Sphere>>()
   val prev_weight = 0.3f
   val next_weight = 0.7f
+  */
 
   inner private class Updater : Runnable {
     override fun run() {
       for (ep in endpoints) {
         ep?.let {
-          endpointPositions[ep]?.let {uwbpos->
-            uwbpos.distance?.let {uwbdis->
-              uwbdis.value.let {uwbvalue->
-                var q1 = map1[ep]
-                q1?.let {
-                  // 不空
-                } ?: let {
-                  // 空
-                  q1 = LinkedList<Sphere>()
-                  map1[ep] = q1 as LinkedList<Sphere>
-                }
-
-                var q2 = map2[ep]
-                q2?.let {
-                  // 不空
-                } ?: let {
-                  // 空
-                  q2 = LinkedList<Sphere>()
-                  map2[ep] = q2 as LinkedList<Sphere>
-                }
+          endpointPositions[ep]?.let { uwbpos ->
+            uwbpos.distance?.let { uwbdis ->
+              uwbdis.value.let { uwbvalue ->
 
                 synchronized(lock) {
-                  currentPos?.let {pose ->
-                    pose.tx()?.let {
-                      var s = Sphere(pose.tx().toDouble(),
-                                     pose.ty().toDouble(),
-                                     pose.tz().toDouble(),
-                                     uwbvalue.toDouble())
-                      Log.i("xixia", "[Q1][${q1?.size?.plus(1)}][${q2?.size}][${s.toString()}]")
-                      q1?.offer(s)
-                    }
-                  }
-                }
-                if (q1?.size!! > 4) {
-                  var x = 0.0
-                  var y = 0.0
-                  var z = 0.0
-                  var r = 0.0
-                  q1?.forEach {spe ->
-                    x += spe.mX
-                    y += spe.mY
-                    z += spe.mZ
-                    r += spe.mR
-                  }
-                  x /= q1?.size!!
-                  y /= q1?.size!!
-                  z /= q1?.size!!
-                  r /= q1?.size!!
-
-                  q1?.clear() // clear all
-                  var s = Sphere(x, y, z, r)
-                  prevSp?.let {
+                  var filter = filterMap[ep]
+                  filter?.let {
                     // 不空
-                    var _x = it.mX * prev_weight + x * next_weight
-                    var _y = it.mY * prev_weight + y * next_weight
-                    var _z = it.mZ * prev_weight + z * next_weight
-                    var _r = it.mR * prev_weight + r * next_weight
-                    s = Sphere(_x, _y, _z, _r)
+                  } ?: let {
+                    // 空
+                    filter = EWMAFilter(0.7)
+                    filterMap[ep] = filter!!
                   }
-                  prevSp = s
-                  q2?.offer(s)
-                  Log.i("xixia", "[Q2][${q1?.size}][${q2?.size}][${s.toString()}]")
 
-                  if (q2?.size!! > 3) {
+                  var spheres = sphereMap[ep]
+                  spheres?.let {
+                    // 不空
+                  } ?: let {
+                    // 空
+                    spheres = LinkedList<Sphere>()
+                    sphereMap[ep] = spheres as LinkedList<Sphere>
+                  }
 
-                    var x_ = 0.0
-                    var y_ = 0.0
-                    var z_ = 0.0
-                    for (s in q2!!) {
-                      x_ += s.mX
-                      y_ += s.mY
-                      z_ += s.mZ
-                    }
-                    x_ /= q2?.size!!
-                    y_ /= q2?.size!!
-                    z_ /= q2?.size!!
-
-                    // calculate here
-                    val optimizer = PowellOptimizer(1e-6, 1e-8)
-                    val result = optimizer.optimize(
-                      MaxIter(1000),  // 设置最大迭代次数
-                      MaxEval(1000),  // 设置最大评估次数
-                      ObjectiveFunction { point: DoubleArray ->
-                        var sum = 0.0
-                        for (sphere in q2!!) {
-                          val dist = sphere.distanceTo(point[0], point[1], point[2])
-                          sum += dist * dist
+                  currentPos?.let { pose ->
+                    pose.tx()?.let {
+                      var s = Sphere(
+                        pose.tx().toDouble(),
+                        pose.ty().toDouble(),
+                        pose.tz().toDouble(),
+                        filter!!.update(uwbvalue.toDouble())
+                      )
+                      spheres!!.offer(s)
+                      // Log.i("xixia", s.toString())
+                      if (spheres!!.size > 3) {
+                        var x_ = 0.0
+                        var y_ = 0.0
+                        var z_ = 0.0
+                        for (s in spheres!!) {
+                          x_ += s.mX
+                          y_ += s.mY
+                          z_ += s.mZ
                         }
-                        sum
-                      },
-                      InitialGuess(doubleArrayOf(x_, y_, z_)),
-                      GoalType.MINIMIZE
-                    )
+                        x_ /= spheres?.size!!
+                        y_ /= spheres?.size!!
+                        z_ /= spheres?.size!!
 
-                    q2?.poll()
-                    var sb = StringBuilder()
-                    sb.append("AR pos: \n" + "[" + prevSp.toString() + "]" + "\n\n" + "UWB Distance: \n" + uwbvalue.toDouble() + "\n\n" + "UWB Pos: \n" + Arrays.toString(result.point))
-                    activity.runOnUiThread {
-                      tvResult.text = sb
+                        // calculate here
+                        val optimizer = PowellOptimizer(1e-6, 1e-8)
+                        val result = optimizer.optimize(
+                          MaxIter(1000),  // 设置最大迭代次数
+                          MaxEval(1000),  // 设置最大评估次数
+                          ObjectiveFunction { point: DoubleArray ->
+                            var sum = 0.0
+                            for (sphere in spheres!!) {
+                              val dist = sphere.distanceTo(point[0], point[1], point[2])
+                              sum += dist * dist
+                            }
+                            sum
+                          },
+                          InitialGuess(doubleArrayOf(x_, y_, z_)),
+                          GoalType.MINIMIZE
+                        )
+
+                        spheres?.poll()
+                        var sb = StringBuilder()
+                        sb.append(
+                          "AR pos: \n" + "[" + pose.tx() + ", " + pose.ty() + ", " + pose.tz() + "]" + "\n\n" + "UWB Distance: \n" + uwbvalue.toDouble() + "\n\n" + "UWB Pos: \n" + Arrays.toString(
+                            result.point
+                          )
+                        )
+
+                        var lr = "Left"
+                        if (result.point[0] > pose.tx()) {
+                          lr = "Right"
+                        }
+                        var ud = "Up"
+                        if (result.point[1] > pose.ty()) {
+                          ud = "Down"
+                        }
+                        sb.append("\n$lr $ud")
+                        activity.runOnUiThread {
+                          tvResult.text = sb
+                        }
+                        Log.i("xixia", sb.toString())
+                      }
                     }
-                    Log.i("xixia", "[RE][${q1?.size}][${q2?.size}][${Arrays.toString(result.point)}]")
                   }
-
                 }
               }
             }
