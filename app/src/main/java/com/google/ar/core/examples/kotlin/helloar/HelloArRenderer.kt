@@ -632,16 +632,31 @@ class HelloArRenderer(val activity: HelloArActivity, val tvResult: TextView) :
                         pose.tz().toDouble(),
                         filter!!.update(uwbvalue.toDouble())
                       )
-                      spheres!!.offer(s)
+
+                      var count = 0
+                      spheres!!.forEach {
+                        if ((Math.abs(it.mX -s.mX) > 0.1) || (Math.abs(it.mY -s.mY) > 0.1) || (Math.abs(it.mZ -s.mZ) > 0.1)) {
+                          count++
+                        }
+                      }
+                      if (count == spheres!!.size) {
+                        spheres!!.offer(s)
+                      }
                       // Log.i("xixia", s.toString())
-                      if (spheres!!.size > 3) {
+                      if (spheres!!.size > 9) {
                         var x_ = 0.0
                         var y_ = 0.0
                         var z_ = 0.0
+                        var sbPose = StringBuilder()
                         for (s in spheres!!) {
                           x_ += s.mX
                           y_ += s.mY
                           z_ += s.mZ
+
+                          if (sbPose.length > 0) {
+                            sbPose.append("\n")
+                          }
+                          sbPose.append("[" + "%.2f".format(s.mX) + ", " + "%.2f".format(s.mY) + ", " + "%.2f".format(s.mZ) + "]")
                         }
                         x_ /= spheres?.size!!
                         y_ /= spheres?.size!!
@@ -650,8 +665,8 @@ class HelloArRenderer(val activity: HelloArActivity, val tvResult: TextView) :
                         // calculate here
                         val optimizer = PowellOptimizer(1e-6, 1e-8)
                         val result = optimizer.optimize(
-                          MaxIter(1000),  // 设置最大迭代次数
-                          MaxEval(1000),  // 设置最大评估次数
+                          MaxIter(10000),  // 设置最大迭代次数
+                          MaxEval(20000),  // 设置最大评估次数
                           ObjectiveFunction { point: DoubleArray ->
                             var sum = 0.0
                             for (sphere in spheres!!) {
@@ -666,11 +681,13 @@ class HelloArRenderer(val activity: HelloArActivity, val tvResult: TextView) :
 
                         spheres?.poll()
                         var sb = StringBuilder()
+                        sb.append(sbPose)
+                        sb.append("\n\n")
                         sb.append(
-                          "AR pos: \n" + "[" + pose.tx() + ", " + pose.ty() + ", " + pose.tz() + "]" + "\n\n" + "UWB Distance: \n" + uwbvalue.toDouble() + "\n\n" + "UWB Pos: \n" + Arrays.toString(
-                            result.point
+                          "AR pos: \n" + "[" + "%.2f".format(pose.tx()) + ", " + "%.2f".format(pose.ty()) + ", " + "%.2f".format(pose.tz()) + "]"
+                                  + "\n\n" + "UWB Distance: \n" + "%.2f".format(uwbvalue.toDouble()) + "\n\n" + "UWB Pos: \n"
+                                  + "[" + "%.2f".format(result.point[0]) + ", " + "%.2f".format(result.point[1]) + ", " + "%.2f".format(result.point[2]) + "]"
                           )
-                        )
 
                         var lr = "Left"
                         if (result.point[0] > pose.tx()) {
@@ -682,7 +699,7 @@ class HelloArRenderer(val activity: HelloArActivity, val tvResult: TextView) :
                         }
                         sb.append("\n$lr $ud")
                         activity.runOnUiThread {
-                          tvResult.text = sb
+                          tvResult.text = sb.toString()
                         }
                         Log.i("xixia", sb.toString())
                       }
